@@ -1,0 +1,560 @@
+---
+title: "Binary Prediction Models Thru Regression"
+author: "Adrianna Westbrook"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# For general use
+library(dplyr)
+library(tidyverse)
+library(fastDummies)
+
+# For variable selection
+library(leaps)
+library(MASS)
+library(glmnet)
+library(olsrr)
+
+# For validation
+library(caret)
+library(rms)
+
+# For performance measures
+library(pROC)
+library(bootLR) # Optional (will not run this code in class but results will be shown)
+```
+
+## 0. Read in data
+
+```{r load data}
+df <- read.csv("C:/Users/alwestb/OneDrive - Emory University/Documents/Conferences/CSP 2024/Presenter stuff/Presentation/Example Data_2.csv")
+df <- df %>%
+  dplyr::select(!(id)) %>% # Reduce your dataset down to only the outcome and predictors
+  mutate(mortality = ifelse(mortality == "No",0,1)) # Make sure outcome is 0/1 coding
+```
+
+# Variable Selection
+### 1a. Stepwise regression - Forward
+```{r}
+#### regsubsets 
+# Library
+library(leaps)
+
+# Code
+models <- regsubsets(mortality~., data = df, 
+                     nvmax = 10,
+                     really.big=T,
+                     method = "forward") # This is running the procedure
+results <- summary(models) # This is saving the results to a list for later use
+
+data.frame(
+  Adj.R2 = which.max(results$adjr2), # What number of coefficients produces highest adjusted Rsquared
+  CP = which.min(results$cp), # What number of coefficients produces lowest BIC
+  BIC = which.min(results$bic) # What number of coefficients produces lowest BIC
+)
+
+coef(models, 10) #Replace 10 with whatever number of coefficients was optimal
+
+# Dictionary
+# nvmax = number of maximum variables that can be in the model (optional)
+# method = method for selection ("forward" for forwards)
+# really.big = when wanting to consider models with 50+ variables, set to TRUE 
+
+#### stepAIC
+# Library
+library(MASS)
+
+# Code
+full.model <- lm(mortality ~., data = df) #Fit the full model 
+
+step.model <- stepAIC(full.model, direction = "forward", 
+                      trace = FALSE) # Stepwise regression model
+summary(step.model) # Prints the final model
+
+# Dictionary
+# trace = whether it should print the process as it goes (probably want this to be set to FALSE)
+# direction = method for selection ("forward" for forwards)
+
+### olsrr 
+# Library
+library(olsrr)
+
+full.model <- lm(mortality ~., data = df) # Fit the full model
+
+ols_step_forward_p(full.model) # Will run forward selection and produce output of the model
+```
+
+### 1b. Stepwise regression - Backward
+```{r}
+#### regsubsets 
+# Library
+library(leaps)
+
+# Code
+models <- regsubsets(mortality~., data = df, 
+                     nvmax = 10,
+                     really.big=T,
+                     method = "backward") # This is running the procedure
+results <- summary(models) # This is saving the results to a list for later use
+
+data.frame(
+  Adj.R2 = which.max(results$adjr2), # What number of coefficients produces highest adjusted Rsquared
+  CP = which.min(results$cp), # What number of coefficients produces lowest BIC
+  BIC = which.min(results$bic) # What number of coefficients produces lowest BIC
+)
+
+coef(models, 10) # Replace 10 with whatever number of coefficients was optimal
+
+# Dictionary
+# nvmax = number of maximum variables that can be in the model (optional)
+# method = method for selection ("backward" for backwards)
+# really.big = when wanting to consider models with 50+ variables, set to TRUE 
+
+#### stepAIC
+# Library
+library(MASS)
+
+# Code
+full.model <- lm(mortality ~., data = df) #Fit the full model 
+
+step.model <- stepAIC(full.model, direction = "backward", 
+                      trace = FALSE) # Stepwise regression model
+summary(step.model) # Prints the final model
+
+# Dictionary
+# trace = whether it should print the process as it goes (probably want this to be set to FALSE)
+# direction = method for selection ("backward" for backwards)
+
+### olsrr 
+# Library
+library(olsrr)
+
+full.model <- lm(mortality ~., data = df) # Fit the full model
+
+ols_step_backward_p(full.model) # Will run forward selection and produce output of the model
+```
+
+### 1c. Stepwise regression - Bidirectional
+```{r}
+#### regsubsets 
+# Library
+library(leaps)
+
+# Code
+models <- regsubsets(mortality~., data = df, 
+                     nvmax = 5,
+                     really.big=T,
+                     method = "seqrep") # This is running the procedure
+results <- summary(models) # This is saving the results to a list for later use
+
+data.frame(
+  Adj.R2 = which.max(results$adjr2), # What number of coefficients produces highest adjusted Rsquared
+  CP = which.min(results$cp), # What number of coefficients produces lowest BIC
+  BIC = which.min(results$bic) # What number of coefficients produces lowest BIC
+)
+
+coef(models, 4) # Replace 10 with whatever number of coefficients was optimal
+
+# Dictionary
+# nvmax = number of maximum variables that can be in the model (optional)
+# method = method for selection ("seqrep" for bidirectional)
+# really.big = when wanting to consider models with 50+ variables, set to TRUE 
+
+#### stepAIC
+# Library
+library(MASS)
+
+# Code
+full.model <- lm(mortality ~., data = df) # Fit the full model 
+
+step.model <- stepAIC(full.model, direction = "both", 
+                      trace = FALSE) # Stepwise regression model
+summary(step.model) # Prints the final model
+
+# Dictionary
+# trace = whether it should print the process as it goes (probably want this to be set to FALSE)
+# direction = method for selection ("both" for bidirectional)
+
+
+```
+
+### 2. Best subset
+```{r}
+#### regsubsets 
+# Library
+library(leaps)
+
+# Code
+models <- regsubsets(mortality~., data = df, 
+                     nvmax = 10,
+                     really.big=T,
+                     method = "exhaustive") # This is running the procedure
+results <- summary(models) # This is saving the results to a list for later use
+
+data.frame(
+  Adj.R2 = which.max(results$adjr2), # What number of coefficients produces highest adjusted Rsquared
+  CP = which.min(results$cp), # What number of coefficients produces lowest BIC
+  BIC = which.min(results$bic) # What number of coefficients produces lowest BIC
+)
+
+coef(models, 10) # Replace 10 with whatever number of coefficients was optimal
+
+# Dictionary
+# nvmax = number of maximum variables that can be in the model (optional)
+# method = method for selection ("exhaustive" for best subset)
+# really.big = when wanting to consider models with 50+ variables, set to TRUE
+
+### olsrr (takes long time to run - example here: https://olsrr.rsquaredacademy.com/articles/variable_selection.html#best-subset-regression)
+# Library
+library(olsrr)
+
+full.model <- lm(mortality ~., data = df) # Fit the full model
+
+ols_step_best_subset(full.model) # Will run best subset and produce output for you to determine optimal number of variables
+```
+
+### 3a. Regularization techniques - LASSO
+```{r}
+# Library
+library(glmnet)
+
+# Before this step, make sure your dataframe contains only the outcome variable and the predictors you are interested in using 
+
+xfactors <- model.matrix(mortality ~ ., data=df)[, -1] # Need to first turn your dataframe into a model matrix. [, -1] is to remove the intercept
+mort <- df$mortality # Assign your outcome variable as a vector
+
+set.seed(12345) # Seed for consistent results
+cvmod = cv.glmnet(xfactors, y=as.factor(mort), alpha=1, family = "binomial", type.measure = "auc") # Use cross-validation to select the "optimal" lambda 
+
+coef(cvmod) # Gives coefficients and their betas (zeros are omitted)
+
+summary(cvmod$cvm) # Gives the values of the criteria you had chosen for selecting lambda
+```
+
+### 3b. Regularization techniques - Ridge
+```{r}
+# Library
+library(glmnet)
+
+# Before this step, make sure your dataframe contains only the outcome variable and the predictors you are interested in using 
+
+xfactors <- model.matrix(mortality ~ ., data=df)[, -1] # Need to first turn your dataframe into a model matrix. [, -1] is to remove the intercept
+mort <- df$mortality # Assign your outcome variable as a vector
+
+set.seed(12345) # Seed for consistent results
+cvmod = cv.glmnet(xfactors, y=as.factor(mort), alpha=0, family = "binomial", type.measure = "auc") # Use cross-validation to select the "optimal" lambda 
+
+coef(cvmod) # Gives coefficients and their betas (zeros are omitted)
+
+summary(cvmod$cvm) # Gives the values of the criteria you had chosen for selecting lambda
+```
+
+### 3c. Regularization techniques - Elastic
+```{r}
+# Library
+library(glmnet)
+
+# Before this step, make sure your dataframe contains only the outcome variable and the predictors you are interested in using 
+
+xfactors <- model.matrix(mortality ~ ., data=df)[, -1] # Need to first turn your dataframe into a model matrix. [, -1] is to remove the intercept
+mort <- df$mortality # Assign your outcome variable as a vector
+
+set.seed(12345) # Seed for consistent results
+cvmod = cv.glmnet(xfactors, y=as.factor(mort), alpha=0.5, family = "binomial", type.measure = "auc") # Use cross-validation to select the "optimal" lambda 
+
+coef(cvmod) # Gives coefficients and their betas (zeros are omitted)
+
+summary(cvmod$cvm) # Gives the values of the criteria you had chosen for selecting lambda
+```
+
+# Validation Techniques	
+### 4a. Split validation - Random
+```{r}
+#### base R - use when you don't care to balance the outcome
+dt = sort(sample(nrow(df), nrow(df)*.7))
+
+train<-df[dt,]
+test<-df[-dt,]
+
+#### createDataPartition - use when you want to balance the outcome
+library(caret)
+
+set.seed(3456)
+
+trainIndex <- createDataPartition(df$mortality, p = .7, list = FALSE, times = 1)
+
+Train <- df[ trainIndex,]
+Valid <- df[-trainIndex,]
+
+# Dictionary
+# p = proportion in training set
+# list = FALSE for wanting it in matrix form, TRUE for wanting it in list form
+# times = how many repetitions (1 for regular random split, more for cross-validation) 
+```
+
+### 4b. Split validation - Non-random
+```{r}
+### Using base R and tidyverse - THIS EXAMPLE DOES NOT APPLY TO OUR DATA
+Train <- df %>%
+  filter(Center = "Emory")
+
+Valid <- df %>%
+  filter(Center = "UAB")
+
+# Dictionary
+# Center = a totally made up variable that is not in this dataset but it represents the variable you are non-randomly splitting the data on 
+```
+
+### Pre-5. Build final model
+```{r}
+# Used best subset limiting to 10 variables using the leaps package in R. Optimal model was the one with best Mallows’ Cp.
+# Chosen variables:cancerYes, infectionYes, alertYes, dist_100Yes, weightOver, dispoLeft AMA, dispoTransfer, age, crp, oxygen
+
+# In the interest of quickly making my variables like that of the variable selection software, I am going to use fastDummies. You could also do this by hand if so inclined. 
+
+dummy_df <- dummy_cols(df, remove_first_dummy = FALSE) # remove_first_dummy = FALSE so it does not remove any columns that I might need
+
+# For my own sanity, reducing dummy_df to only the variables I am interested in (this step is optional)
+  # Notice that the dummy_df column names are very similar to the variable selection output, just with an underscore between the variable name and level
+  # Continuous variables retain their names because they are not dummified (that also means categorical variables using a number system are not dummified)
+dummy_df <- dummy_df %>%
+  dplyr::select(mortality, cancer_Yes, infection_Yes, alert_Yes, dist_100_Yes, weight_Over, `dispo_Left AMA`, dispo_Transfer, age, crp, oxygen)
+
+# Run model
+glm_fit <- glm(mortality~.,
+              data = dummy_df,
+              family = binomial)
+summary(glm_fit)
+```
+
+
+### 5a. Cross-validation - Leave-one-out (2 minutes)
+```{r}
+### caret
+# Library
+library(caret)
+
+# Prep
+trial <- dummy_df %>%
+  mutate_at(vars(mortality, cancer_Yes, infection_Yes, alert_Yes, dist_100_Yes, weight_Over, `dispo_Left AMA`, dispo_Transfer), ~ ifelse(. == 1, "Yes", "No"))
+names(trial) <- gsub(" ", "_", colnames(trial))
+
+
+# Process
+train.control <- trainControl(method = "LOOCV", summaryFunction = twoClassSummary, classProbs = TRUE, savePredictions=TRUE) # Define training control
+
+model <- train(as.factor(mortality) ~., data = trial, method = "glm", family = "binomial", trControl = train.control) # Train the model
+
+print(model) # Summarize the results
+
+# Dictionary
+# method = which CV method to use (LOOCV = Leave-one-out) 
+```
+
+### 5b. Cross-validation - K-fold
+```{r}
+### caret
+# Library
+library(caret)
+
+# Prep
+trial <- dummy_df %>%
+  mutate_at(vars(mortality, cancer_Yes, infection_Yes, alert_Yes, dist_100_Yes, weight_Over, `dispo_Left AMA`, dispo_Transfer), ~ ifelse(. == 1, "Yes", "No"))
+names(trial) <- gsub(" ", "_", colnames(trial))
+
+
+# Process
+train.control <- trainControl(method = "cv", summaryFunction = twoClassSummary, classProbs = TRUE, savePredictions=TRUE, number = 10) # Define training control
+
+model <- train(as.factor(mortality) ~., data = trial, method = "glm", family = "binomial", trControl = train.control) # Train the model
+
+print(model) # Summarize the results
+
+# Dictionary
+# method = which CV method to use (cv = K-fold) 
+# number = number of folds
+```
+
+### 5c. Cross-validation - Repeated K-fold
+```{r}
+### caret
+# Library
+library(caret)
+
+# Prep
+trial <- dummy_df %>%
+  mutate_at(vars(mortality, cancer_Yes, infection_Yes, alert_Yes, dist_100_Yes, weight_Over, `dispo_Left AMA`, dispo_Transfer), ~ ifelse(. == 1, "Yes", "No"))
+names(trial) <- gsub(" ", "_", colnames(trial))
+
+
+# Process
+train.control <- trainControl(method = "repeatedcv", summaryFunction = twoClassSummary, classProbs = TRUE, savePredictions=TRUE, number = 5, repeats = 3) # Define training control
+
+model <- train(as.factor(mortality) ~., data = trial, method = "glm", family = "binomial", trControl = train.control) # Train the model
+
+print(model) # Summarize the results
+
+# Dictionary
+# method = which CV method to use (repeatedcv = Repeated K-fold) 
+# number = number of folds
+# repeats = number of repeats
+```
+
+### 6. Bootstrap validation
+```{r}
+### rms
+# Library
+library(rms)
+
+# Process
+B <- 500 # Number of bootstraps
+
+reps <- 500 # Number of bootstraps
+
+dxy <- numeric(reps) # Repeat of above
+
+n <- nrow(dummy_df) # Number of rows in dataset
+
+# Run the model using the lrm function
+f <- lrm(as.factor(mortality) ~ cancer_Yes+ infection_Yes+ alert_Yes+ dist_100_Yes+ weight_Over+ `dispo_Left AMA`+ dispo_Transfer+ age+ crp+ oxygen, data = dummy_df, x = TRUE, y = TRUE, maxit=1000)
+
+f    # show original model fit
+
+validate(f, B=B)    # show overall validation
+
+# This next part can take hours to run - only recommend running it at the end of your work day and then returning to it in the morning
+for(i in 1 : reps) {
+   g <- update(f, subset=sample(1 : n, n, replace=TRUE))
+   v <- validate(g, B=B)
+   dxy[i] <- v['Dxy', 'index.corrected']
+}
+
+quantile(dxy, c(.025, .975))
+summary(dxy)
+
+# Dictionary
+# x, y = setting FALSE ensures they retain their original name
+```
+
+# Model Performance
+
+### 7. Build final model
+```{r}
+# Used best subset limiting to 10 variables using the leaps package in R. Optimal model was the one with best Mallows’ Cp.
+# Chosen variables:cancerYes, infectionYes, alertYes, dist_100Yes, weightOver, dispoLeft AMA, dispoTransfer, age, crp, oxygen
+
+# In the interest of quickly making my variables like that of the variable selection software, I am going to use fastDummies. You could also do this by hand if so inclined. 
+
+dummy_df <- dummy_cols(df, remove_first_dummy = FALSE) # remove_first_dummy = FALSE so it does not remove any columns that I might need
+
+# For my own sanity, reducing dummy_df to only the variables I am interested in (this step is optional)
+  # Notice that the dummy_df column names are very similar to the variable selection output, just with an underscore between the variable name and level
+  # Continuous variables retain their names because they are not dummified (that also means categorical variables using a number system are not dummified)
+dummy_df <- dummy_df %>%
+  dplyr::select(mortality, cancer_Yes, infection_Yes, alert_Yes, dist_100_Yes, weight_Over, `dispo_Left AMA`, dispo_Transfer, age, crp, oxygen)
+
+# Run model
+glm_fit <- glm(mortality~.,
+              data = dummy_df,
+              family = binomial)
+summary(glm_fit)
+
+# Output predictions
+dummy_df$probs <- predict(glm_fit, type="response") # "response" ensures it outputs it as a probability 
+
+dummy_df$probs <- round(dummy_df$probs, digits=2) # Rounding for simplicity
+
+```
+
+### 8. Find optimal threshold
+```{r}
+# If I want an arbitrarily chosen threshold then I can simply say that all those above the threshold should be considered to have the outcome while all those below the threshold should be considered to not have it 
+  # Let's say I chose 0.5
+
+dummy_df <- dummy_df %>%
+  mutate(predicted_mortality_v1 = case_when(
+    probs>=0.5 ~ 1,
+    !is.na(probs) ~ 0))
+
+# But let's say we want to find the optimal threshold based on Youden's index
+library(pROC)
+
+performance <- roc(dummy_df$mortality, dummy_df$probs)
+
+plot(performance) # Can plot the ROC curve
+
+performance[["thresholds"]]
+
+thresholds <- as.data.frame(ci.coords(performance, x=c(0.005, 0.015, 0.025, 0.035, 0.045, 0.055, 0.065, 0.075, 0.085, 0.095, 0.105, 0.115, 0.125, 0.135, 0.145, 0.155, 0.165, 0.175, 0.185, 0.195, 0.205, 0.215, 0.225, 0.235, 0.245, 0.255, 0.265, 0.275, 0.285, 0.295, 0.305, 0.315, 0.325, 0.335, 0.345, 0.355, 0.365, 0.375, 0.385, 0.395,0.405, 0.415, 0.425, 0.435, 0.445, 0.455, 0.465, 0.475, 0.485, 0.495, 0.505, 0.515, 0.525, 0.535, 0.545, 0.555, 0.565, 0.575, 0.585, 0.595, 0.605, 0.615, 0.625, 0.635, 0.645, 0.655, 0.665, 0.675, 0.685, 0.695, 0.705, 0.715, 0.725, 0.735, 0.745, 0.755, 0.765, 0.775, 0.785, 0.800, 0.815, 0.825, 0.835, 0.845, 0.855, 0.865, 0.875, 0.885, 0.895, 0.905, 0.915, 0.925, 0.935), input = "threshold", ret=c("threshold", "specificity", "sensitivity", "npv", "ppv")))
+
+# Calculate Youden's index and likelihood ratio 
+thresholds <- thresholds %>%
+  mutate(Youdens = sensitivity.50. + specificity.50. - 1) %>%
+  mutate(LR_pos = sensitivity.50. / (1 - specificity.50.)) %>%
+  mutate(LR_neg = (1 - sensitivity.50.) / specificity.50.)
+
+# Optimal threshold is 0.22 so we assign a new predicted outcome based on that threshold
+dummy_df <- dummy_df %>%
+  mutate(predicted_mortality_v2 = case_when(
+    probs>=0.22 ~ 1,
+    !is.na(probs) ~ 0))
+```
+
+### 9. Diagnostic accuracy at the optimal threshold
+```{r}
+# Unfortunately the process of obtaining a 95% CI for likelihood ratios requires a little more work
+library(bootLR)
+
+table(dummy_df$mortality, dummy_df$predicted_mortality_v2)
+table(dummy_df$mortality)
+
+BayesianLR.test(truePos=629, totalDzPos=797, trueNeg=2460, totalDzNeg=3203) # This usually takes my computer ~15-20 minutes to run
+
+# Let's clean up and get diagnostic accuracy results at our optimal threshold
+optimal_accuracy <- thresholds %>%
+  filter(threshold.50. == 0.215)
+
+optimal_accuracy$`Sensitivity (95% CI)` <- paste(round(optimal_accuracy$sensitivity.50.*100,1)," (",round(optimal_accuracy$sensitivity.2.5.*100,1),", ",round(optimal_accuracy$sensitivity.97.5.*100,1),")", sep='')
+
+optimal_accuracy$`Specificity (95% CI)` <- paste(round(optimal_accuracy$specificity.50.*100,1)," (",round(optimal_accuracy$specificity.2.5.*100,1),", ",round(optimal_accuracy$specificity.97.5.*100,1),")", sep='')
+
+optimal_accuracy$`PPV (95% CI)` <- paste(round(optimal_accuracy$ppv.50.*100,1)," (",round(optimal_accuracy$ppv.2.5.*100,1),", ",round(optimal_accuracy$ppv.97.5.*100,1),")", sep='')
+
+optimal_accuracy$`NPV (95% CI)` <- paste(round(optimal_accuracy$npv.50.*100,1)," (",round(optimal_accuracy$npv.2.5.*100,1),", ",round(optimal_accuracy$npv.97.5.*100,1),")", sep='')
+
+optimal_accuracy$`LR+ (95% CI)` <- paste(round(optimal_accuracy$LR_pos*100,1)," (",round(0.238,1),", ",round(0.313,1),")", sep='')
+
+optimal_accuracy$`LR- (95% CI)` <- paste(round(optimal_accuracy$LR_neg*100,1)," (",round(3.167,1),", ",round(3.665,1),")", sep='')
+
+# Reduce down to the necessary components
+optimal_accuracy <- optimal_accuracy %>%
+  dplyr::select(`Sensitivity (95% CI)`, `Specificity (95% CI)`, `PPV (95% CI)`, `NPV (95% CI)`, `LR+ (95% CI)`, `LR- (95% CI)`)
+```
+
+### 10. AUPRC
+```{r}
+### PRROC
+# Library
+library(PRROC)
+
+# Process
+pr <- pr.curve(scores.class0 = dummy_df$probs, weights.class0 = dummy_df$mortality, curve = TRUE, max.compute = TRUE, min.compute = TRUE)
+
+pr # Print results
+
+plot(pr) # Print curve
+
+prop.table(table(dummy_df$mortality)) # Confirm %
+
+# Dictionary
+# scores.class0 = the calculated probability of outcome
+# weights.class0 = the true classification variable
+# min.compute = min AUC
+# max.compute = max AUC
+# curve = TRUE means can print plot
+
+```
+
