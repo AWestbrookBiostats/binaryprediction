@@ -202,6 +202,9 @@ data.frame(
 
 coef(models, 10) # Replace 10 with whatever number of coefficients was optimal
 
+# models <- regsubsets(mortality~., data = df, nvmax = 10, really.big=T, method = "exhaustive", 
+#                      weights = weight_var) # The addition of "weights =" allows you to add weight variable if needed
+
 # Dictionary
 # nvmax = number of maximum variables that can be in the model (optional)
 # method = method for selection ("exhaustive" for best subset)
@@ -555,6 +558,19 @@ prop.table(table(dummy_df$mortality)) # Confirm %
 # min.compute = min AUC
 # max.compute = max AUC
 # curve = TRUE means can print plot
+
+```
+
+
+### 11. Sample size calculations
+```{r}
+### psampsize
+# Library
+library(pmsampsize)
+
+# Process
+pmsampsize(type = "b", cstatistic = 0.80, parameters = 20, prevalence = 0.10)
+
 
 ```
 
